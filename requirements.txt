@@ -10,7 +10,7 @@ sentence-transformers
 pypdf
 arxiv
 wikipedia-api
-duckduckgo-search
+duckduckgo-search==6.4.2
 youtube-transcript-api
 python-dotenv
 watchdog
