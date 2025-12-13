@@ -14,5 +14,4 @@ duckduckgo-search
 youtube-transcript-api
 python-dotenv
 watchdog
-Wikipedia
--U ddgs
+wikipedia
