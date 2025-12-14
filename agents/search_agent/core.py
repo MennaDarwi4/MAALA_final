@@ -1,8 +1,15 @@
 from langchain_groq import ChatGroq
 from langchain_community.utilities import ArxivAPIWrapper, WikipediaAPIWrapper
-from langchain_community.tools import ArxivQueryRun, WikipediaQueryRun, DuckDuckGoSearchRun
+from langchain_community.tools import ArxivQueryRun, WikipediaQueryRun
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from langchain_core.tools import Tool
 import re
+
+# Direct import to bypass langchain-community issues
+try:
+    from duckduckgo_search import DDGS
+except ImportError:
+    DDGS = None
 
 class SearchAgent:
     def __init__(self, groq_api_key):
@@ -19,7 +26,24 @@ class SearchAgent:
         api_wrapper_arxiv = ArxivAPIWrapper(top_k_results=2, doc_content_chars_max=1500)
         self.arxiv = ArxivQueryRun(api_wrapper=api_wrapper_arxiv)
         
-        self.search = DuckDuckGoSearchRun()
+        # Custom DDGS Wrapper
+        def search_func(query: str):
+            if DDGS is None:
+                return "Error: duckduckgo-search library not installed."
+            try:
+                results = DDGS().text(query, max_results=4)
+                if not results:
+                    return "No results found."
+                # Format results to string
+                return "\n\n".join([f"Title: {r['title']}\nLink: {r['href']}\nSnippet: {r['body']}" for r in results])
+            except Exception as e:
+                return f"Search error: {str(e)}"
+
+        self.search_tool = Tool(
+            name="Search",
+            func=search_func,
+            description="Search the internet for current events, news, recent information, and real-time data."
+        )
         
         self.tools = {
             "Wikipedia": {
@@ -31,7 +55,7 @@ class SearchAgent:
                 "description": "Search scientific papers and academic research. Use for technical, scientific, or research-related questions."
             },
             "Search": {
-                "tool": self.search,
+                "tool": self.search_tool,
                 "description": "Search the internet for current events, news, recent information, and real-time data."
             }
         }
@@ -72,8 +96,7 @@ CRITICAL RULES:
 - ALWAYS cite which tool provided the information
 - Action must be EXACTLY: Wikipedia, Arxiv, or Search
 - Be thorough and detailed in your Final Answer
-
-Begin!"""
+- Begin!"""
 
     def run(self, query, callbacks=None):
         """Run the search agent"""
@@ -139,7 +162,14 @@ Begin!"""
                     # Execute tool
                     if tool_name in self.tools:
                         try:
-                            observation = self.tools[tool_name]["tool"].run(tool_input)
+                            # Direct check for 'tool' key or callable
+                            tool_instance = self.tools[tool_name]["tool"]
+                            # Handle both Langchain Tool objects and other runnables
+                            if hasattr(tool_instance, "run"):
+                                observation = tool_instance.run(tool_input)
+                            else:
+                                observation = tool_instance(tool_input)
+
                             tools_used += 1
                             sources.append(f"{tool_name}: {tool_input}")
                             
